@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# tmp105_hwmon：TI TMP105 / LM75 兼容 I2C 温度传感器驱动（hwmon）
+#
+# 模块名故意不叫 tmp105.ko：避免与将来打开 CONFIG_SENSORS_LM75 时
+# 内核自带的 tmp105 支持混淆（设计文档 §5.1）。
+obj-m := tmp105_hwmon.o

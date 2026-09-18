@@ -1,0 +1,22 @@
+# kbuild 外部模块构建产物
+*.ko
+*.o
+*.mod
+*.mod.c
+*.order
+*.symvers
+*.cmd
+.tmp_versions/
+.tmp_*.o
+*.d
+
+# verify_qemu.sh 在 9p 共享目录里放客户机回写的中间结果（跑完会自删）
+.verify/
+
+# checkpatch 的缓存/临时文件
+.checkpatch-*
+
+# 编辑器 / 临时文件
+*.swp
+*~
+core
