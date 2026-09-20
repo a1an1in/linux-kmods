@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# chardev_tmp105：TMP105 的字符设备驱动（学习用：字符驱动标准结构）
+#
+# 命名规则见 doc/开发规范.md：
+#   目录 drivers/<总线>/<子系统>_<器件>/，模块名 = 目录名 = 主文件名
+#   （这里 <总线>=i2c、<子系统>=chardev、<器件>=tmp105）
+#
+# 与 hwmon_tmp105 的区别：本模块注册进**字符设备层**（/dev/tmp105），
+# 不注册 i2c client，因此不会占用 0x48，可与 hwmon_tmp105 同时加载。
+obj-m := chardev_tmp105.o
