@@ -3,7 +3,7 @@
 #
 # 端到端验收（宿主侧，覆盖设计文档 §9 的 L1~L4）：
 #   1. make 交叉编译
-#   2. 启动 QEMU（额外挂 -qmp unix socket，用 qmp_set_temp.py 改温度）
+#   2. 启动 QEMU（额外挂 -qmp unix socket，用 scripts/qmp_dev.py 改温度）
 #   3. 自动执行：
 #        L1 i2cget 原始寄存器对照（insmod 前，驱动绑定后 i2c-dev 会 EBUSY）
 #        L2 insmod → 设备树自动 probe → name=tmp105
@@ -15,7 +15,8 @@
 # 所以"取值类"检查一律让**客户机把结果写进 9p 共享目录**（$KMODS_ROOT/.verify），
 # 宿主轮询文件；串口日志只用于看内核 printk（probe 日志）与异常扫描。
 #
-# 用法：./scripts/verify_qemu.sh
+# 位置：tests/i2c/hwmon_tmp105/（与驱动 drivers/i2c/hwmon_tmp105/ 同构，见 doc/开发规范.md）
+# 用法：tests/i2c/hwmon_tmp105/verify_qemu.sh
 # 可用环境变量覆盖：QEMU / KDIR / INITRD / KMODS_ROOT
 set -u
 
@@ -23,7 +24,7 @@ QEMU=${QEMU:-/home/alan/workspace/qemu/build/qemu-system-aarch64}
 KDIR=${KDIR:-/home/alan/workspace/linux-4.9.263}
 INITRD=${INITRD:-/home/alan/workspace/busybox-1.33.1/initramfs.cpio.gz}
 KMODS_ROOT=${KMODS_ROOT:-/home/alan/workspace/linux-kmods}
-KO_IN_GUEST=/mnt/drivers/tmp105_hwmon/tmp105_hwmon.ko
+KO_IN_GUEST=/mnt/drivers/i2c/hwmon_tmp105/hwmon_tmp105.ko
 HWMON=/sys/class/hwmon/hwmon0
 
 SOCK=$(mktemp -u /tmp/tmp105-qmp.XXXXXX.sock)
@@ -49,8 +50,8 @@ trap cleanup EXIT
 echo "== 1. 交叉编译 =="
 if make -C "$KMODS_ROOT" KDIR="$KDIR" ARCH=arm64 \
 	CROSS_COMPILE=aarch64-linux-gnu- > "$BUILD_LOG" 2>&1; then
-	ko=$(ls -l "$KMODS_ROOT/drivers/tmp105_hwmon/tmp105_hwmon.ko" | awk '{print $5}')
-	ok "make 成功（tmp105_hwmon.ko = $ko bytes）"
+	ko=$(ls -l "$KMODS_ROOT/drivers/i2c/hwmon_tmp105/hwmon_tmp105.ko" | awk '{print $5}')
+	ok "make 成功（hwmon_tmp105.ko = $ko bytes）"
 else
 	bad "make 失败"; cat "$BUILD_LOG"; exit 1
 fi
@@ -140,12 +141,13 @@ else
 fi
 
 echo "== 5. L3：QMP 动态改温度（含负温度）=="
-QMP="python3 $KMODS_ROOT/scripts/qmp_set_temp.py $SOCK"
+# 通用 QMP 工具（scripts/qmp_dev.py）：--match 选设备、--prop 选属性
+QMP="python3 $KMODS_ROOT/scripts/qmp_dev.py $SOCK --match tmp105 --prop temperature"
 
 # 5.1 负温度（符号扩展）。注意 QEMU/器件的默认 CONFIG=0 → R1:R0=00 →
 #     温度寄存器 9 位有效（0.5 °C 步进）：-6.25 °C 在寄存器里量化为 -6.5 °C
 #     （= -6500 m°C），而 qom-get 读的是未量化的属性值（-6250）。
-QOM_PATH=$($QMP -6250 2>&1)
+QOM_PATH=$($QMP set --value -6250 2>&1)
 if [ -n "$QOM_PATH" ] && [ "${QOM_PATH#/}" != "$QOM_PATH" ]; then
 	ok "定位到 tmp105 的 QOM 路径：$QOM_PATH，已 qom-set temperature=-6250"
 	qom=$($QMP get)
@@ -160,7 +162,7 @@ if [ -n "$QOM_PATH" ] && [ "${QOM_PATH#/}" != "$QOM_PATH" ]; then
 	fi
 
 	# 5.2 可精确表示的负值：0.5 °C 步进下的 -6.0 °C，必须与 qom-get 完全一致
-	$QMP -6000 >/dev/null 2>&1
+	$QMP set --value -6000 >/dev/null 2>&1
 	qom=$($QMP get)
 	guest_out neg2 "cat $HWMON/temp1_input"
 	got=$(out_value neg2)
@@ -171,7 +173,7 @@ if [ -n "$QOM_PATH" ] && [ "${QOM_PATH#/}" != "$QOM_PATH" ]; then
 	fi
 
 	# 5.3 动态改温度：证明不是读死值
-	$QMP 30000 >/dev/null 2>&1
+	$QMP set --value 30000 >/dev/null 2>&1
 	guest_out dyn "cat $HWMON/temp1_input"
 	got=$(out_value dyn)
 	if [ "$got" = "30000" ]; then
@@ -184,7 +186,7 @@ else
 fi
 
 echo "== 6. L4：客户机自检脚本（阈值/量化/报警）=="
-guest_out rh "sh /mnt/tests/read_hwmon.sh"
+guest_out rh "sh /mnt/tests/i2c/hwmon_tmp105/read_hwmon.sh"
 if wait_file "$OUT/rh" 90 "汇总" && grep -q "FAIL=0" "$OUT/rh"; then
 	ok "read_hwmon.sh 全部通过"
 else
@@ -195,7 +197,7 @@ grep -E "^  \[(PASS|FAIL)\]" "$OUT/rh" 2>/dev/null | sed 's/^/    /'
 
 echo "== 7. L4：反复 insmod/rmmod 100 次（残留检查，§9.4）=="
 rm -f "$OUT/loop"
-send "n=0; while [ \$n -lt 100 ]; do rmmod tmp105_hwmon; insmod $KO_IN_GUEST; n=\$((n+1)); done; rmmod tmp105_hwmon; echo done > /mnt/.verify/loop"
+send "n=0; while [ \$n -lt 100 ]; do rmmod hwmon_tmp105; insmod $KO_IN_GUEST; n=\$((n+1)); done; rmmod hwmon_tmp105; echo done > /mnt/.verify/loop"
 if wait_file "$OUT/loop" 300; then
 	ok "100 次 insmod/rmmod 全部返回成功"
 else

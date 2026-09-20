@@ -16,6 +16,10 @@
 # checkpatch 的缓存/临时文件
 .checkpatch-*
 
+# Python（scripts/*.py）字节码缓存
+__pycache__/
+*.pyc
+
 # 编辑器 / 临时文件
 *.swp
 *~

@@ -18,15 +18,16 @@
 #       };
 #
 # 进入客户机后：
-#   modprobe/insmod tmp105_hwmon.ko（9p 挂到 /mnt 后取 /mnt/drivers/...）
-#   ./tests/read_hwmon.sh
+#   insmod /mnt/drivers/i2c/hwmon_tmp105/hwmon_tmp105.ko
+#   sh /mnt/tests/i2c/hwmon_tmp105/read_hwmon.sh
 #
 # 动态改温度（验证"不是读死值"）两种方式：
 #   A) 带 QMP socket 启动，在**另开一个宿主终端**里用现成脚本：
 #        QMP_SOCK=/tmp/tmp105.sock ./scripts/run_qemu.sh
-#        python3 scripts/qmp_set_temp.py /tmp/tmp105.sock          # 只打印 QOM 路径
-#        python3 scripts/qmp_set_temp.py /tmp/tmp105.sock -6000    # 设为 -6.0 °C
-#        python3 scripts/qmp_set_temp.py /tmp/tmp105.sock get      # 读回属性值
+#        python3 scripts/qmp_dev.py /tmp/tmp105.sock find --match tmp105
+#        python3 scripts/qmp_dev.py /tmp/tmp105.sock set  --match tmp105 --value -6000
+#        python3 scripts/qmp_dev.py /tmp/tmp105.sock get  --match tmp105
+#        python3 scripts/qmp_dev.py /tmp/tmp105.sock hmp 'info status'   # 跑 monitor 命令
 #   B) 在 QEMU 里按 Ctrl-A c 切到 monitor（路径可从 A 的脚本输出拿到）：
 #        (qemu) qom-get /machine/unattached/device[10] temperature
 #        (qemu) qom-set /machine/unattached/device[10] temperature -6000
@@ -71,6 +72,6 @@ fi
 args+=(-append "console=ttyAMA0 rdinit=/linuxrc")
 
 echo "启动：$QEMU ${args[*]}"
-[ -n "$QMP_SOCK" ] && echo "QMP：$QMP_SOCK（宿主侧：scripts/qmp_set_temp.py 改/读温度）"
+[ -n "$QMP_SOCK" ] && echo "QMP：$QMP_SOCK（宿主侧：scripts/qmp_dev.py find/get/set --match <设备> --prop <属性>）"
 echo "提示：串口里 Ctrl-A c 可切到 QEMU monitor（再按一次切回）"
 exec "$QEMU" "${args[@]}" "$@"

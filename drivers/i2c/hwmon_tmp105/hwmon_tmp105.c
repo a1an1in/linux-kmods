@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * tmp105_hwmon.c - TI TMP105 / LM75 兼容 I2C 温度传感器驱动（hwmon）
+ * hwmon_tmp105.c - TI TMP105 / LM75 兼容 I2C 温度传感器驱动（hwmon）
+ *
+ * 命名遵循 doc/开发规范.md：drivers/<总线>/<子系统>_<器件>/
+ * （<总线>=i2c、<子系统>=hwmon、<器件>=tmp105）。
  *
  * 器件（QEMU hw/sensor/tmp105.c 同款，设计文档 §3）：
  *   指针寄存器 + 数据，标准 I2C 读写，从机地址 0x48：
@@ -32,7 +35,12 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 
-#define DRIVER_NAME		"tmp105_hwmon"
+/*
+ * 模块名：决定 .ko 名与 /sys/bus/i2c/drivers/hwmon_tmp105
+ * 注意：hwmon 对外 name 仍是 "tmp105"（用户态 ABI），
+ * 不随模块名变化（见 doc/开发规范.md §1.3）。
+ */
+#define DRIVER_NAME		"hwmon_tmp105"
 
 /* 寄存器指针（设计文档 §3.1） */
 #define TMP105_REG_TEMP		0x00
@@ -270,14 +278,14 @@ static const struct hwmon_channel_info *tmp105_info[] = {
 	NULL,
 };
 
-static const struct hwmon_ops tmp105_hwmon_ops = {
+static const struct hwmon_ops hwmon_tmp105_ops = {
 	.is_visible = tmp105_is_visible,
 	.read = tmp105_read,
 	.write = tmp105_write,
 };
 
 static const struct hwmon_chip_info tmp105_chip_info = {
-	.ops = &tmp105_hwmon_ops,
+	.ops = &hwmon_tmp105_ops,
 	.info = tmp105_info,
 };
 

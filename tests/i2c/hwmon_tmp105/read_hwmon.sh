@@ -4,13 +4,13 @@
 # 在 QEMU 客户机里跑：定位 name=tmp105 的 hwmon 设备，做完 L2 + L4 自检。
 # 用法：
 #   ./read_hwmon.sh                 # 模块已加载，只做检查
-#   ./read_hwmon.sh /mnt/drivers/tmp105_hwmon/tmp105_hwmon.ko   # 先 insmod
+#   ./read_hwmon.sh /mnt/drivers/i2c/hwmon_tmp105/hwmon_tmp105.ko   # 先 insmod
 #
 # 注意：
 #  - L1 的原始寄存器对照（i2cget）必须在 insmod **之前**做：驱动一旦绑定
 #    0x48，i2c-dev 再访问同一从机会返回 "Device or resource busy"（EBUSY）。
 #  - L3 的"动态改温度"和负温度用例需要宿主机的 QMP/qom-set，见
-#    scripts/run_qemu.sh 与 scripts/verify_qemu.sh；本脚本只覆盖客户机侧
+#    scripts/run_qemu.sh 与同目录的 verify_qemu.sh；本脚本只覆盖客户机侧
 #    能独立完成的检查。
 
 HWMON_ROOT=/sys/class/hwmon
@@ -145,6 +145,6 @@ echo "== 汇总：PASS=$pass FAIL=$fail =="
 [ "$fail" -eq 0 ] || exit 1
 
 echo
-echo "提示（宿主机侧，见 scripts/verify_qemu.sh 或 QEMU monitor 的 Ctrl-A c）："
+echo "提示（宿主机侧，见同目录 verify_qemu.sh 或 QEMU monitor 的 Ctrl-A c）："
 echo "  qom-set <tmp105 路径> temperature -6250   # 负温度：temp1_input 应为 -6250"
 echo "  qom-set <tmp105 路径> temperature 30000   # 动态改温度：temp1_input 应跟随"
