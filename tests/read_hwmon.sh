@@ -76,9 +76,11 @@ if command -v i2cget >/dev/null 2>&1; then
 	raw=$(i2cget -y "$I2C_BUS" "$I2C_ADDR" "$TMP105_REG_TEMP" w 2>&1)
 	case "$raw" in
 	*"busy"*)
-		info "i2cget 被占用（驱动已绑定该从机，正常）：原始寄存器对照请"
-		info "      在 insmod 之前 / rmmod 之后单独跑 i2cget -y 0 48 0x00 w"
+		# 驱动已绑定该从机时，普通访问会 EBUSY；-f（I2C_SLAVE_FORCE）可绕过
+		raw=$(i2cget -f -y "$I2C_BUS" "$I2C_ADDR" "$TMP105_REG_TEMP" w 2>&1)
 		;;
+	esac
+	case "$raw" in
 	0x*)
 		# i2cget w 返回 SMBus 低字节在前的字 → 交换回 TMP105 的大端 8.8
 		lo=$((raw & 0xff))
@@ -93,9 +95,11 @@ if command -v i2cget >/dev/null 2>&1; then
 			info "hwmon=$t 与 i2cget=$expect 不同（两次读之间温度被改过？）"
 		fi
 		;;
+	*"busy"*)
+		info "i2cget 被占用且 -f 也不行：$raw"
+		;;
 	*)
-		info "i2cget 失败：$raw（器件没挂上？）
-"
+		info "i2cget 失败：$raw（器件没挂上？）"
 		;;
 	esac
 else
