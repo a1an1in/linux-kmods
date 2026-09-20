@@ -30,7 +30,9 @@ clean)
 sparse)
 	make -C "$ROOT" KDIR="$KDIR" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
 		"KBUILD_FLAGS=${KBUILD_FLAGS[*]} C=2" 2>/dev/null ||
-		for d in "$ROOT"/drivers/*/; do
+	# 顶层 make 没定义 C=2 的入口，逐模块目录做；模块目录按 Kbuild 递归发现
+	# （与顶层 Makefile 同一套规则：drivers/<子系统>/<总线>-<器件>/）
+		for d in $(find "$ROOT/drivers" -name Kbuild -printf '%h\n' 2>/dev/null | sort); do
 			make "${KBUILD_FLAGS[@]}" M="$d" C=2 modules
 		done
 	;;

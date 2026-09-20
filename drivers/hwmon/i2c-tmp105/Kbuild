@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# hwmon_i2c_tmp105：TI TMP105 / LM75 兼容 I2C 温度传感器驱动（hwmon）
+#
+# 命名规则见 doc/开发规范.md：
+#   目录 drivers/<子系统>/<总线>-<器件>/，模块名 = 主文件名 = <子系统>_<器件>
+#   （这里 <子系统>=hwmon、<总线>=i2c、<器件>=tmp105；叶目录 i2c-tmp105
+#    只描述"总线+器件"，子系统由父目录给出；模块名带子系统保证全局唯一，
+#    同一颗芯片在多个子系统时不会撞名，rmmod 按模块名无歧义）
+#
+# 模块名故意不叫 tmp105.ko：避免与内核自带 lm75 驱动（内部 handle 也叫 tmp105）
+# 混淆；但 hwmon 对外 name 仍是 "tmp105"（用户态 ABI，不随模块名变）。
+obj-m := hwmon_i2c_tmp105.o

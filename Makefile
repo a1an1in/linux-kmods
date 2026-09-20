@@ -8,7 +8,7 @@
 #   make list                                  # 列出会被构建的模块目录
 #
 # 目录/命名规则见 doc/开发规范.md：
-#   drivers/<总线>/<子系统>_<器件>/{Kbuild,<子系统>_<器件>.c}
+#   drivers/<子系统>/<总线>-<器件>/{Kbuild,<子系统>_<总线>_<器件>.c}
 # 新增驱动只要按规则建目录（含 Kbuild），**本文件无需修改**（递归发现，任意嵌套深度）。
 
 KDIR		?= /home/alan/workspace/linux-4.9.263

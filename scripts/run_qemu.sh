@@ -18,8 +18,8 @@
 #       };
 #
 # 进入客户机后：
-#   insmod /mnt/drivers/i2c/hwmon_tmp105/hwmon_tmp105.ko
-#   sh /mnt/tests/i2c/hwmon_tmp105/read_hwmon.sh
+#   insmod /mnt/drivers/hwmon/i2c-tmp105/hwmon_i2c_tmp105.ko
+#   sh /mnt/tests/hwmon/i2c-tmp105/read_hwmon.sh
 #
 # 动态改温度（验证"不是读死值"）两种方式：
 #   A) 带 QMP socket 启动，在**另开一个宿主终端**里用现成脚本：
