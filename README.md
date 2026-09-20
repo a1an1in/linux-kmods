@@ -15,6 +15,7 @@ libobject 只做用户态（UIO/VFIO/I2C/SPI/MTD 等），内核态的驱动/模
 |---|---|---|---|---|---|---|
 | i2c | `hwmon_tmp105` | `hwmon_tmp105.ko` | hwmon / TI TMP105（LM75 兼容），地址 0x48 | `/sys/class/hwmon/hwmonN/temp1_{input,max,min,max_alarm}`（m°C） | [设计](doc/i2c/hwmon_tmp105/设计文档.md) · [手动](doc/i2c/hwmon_tmp105/手动测试指南.md) | `tests/i2c/hwmon_tmp105/`（13 项） |
 | i2c | `chardev_tmp105` | `chardev_tmp105.ko` | chardev / 同一颗 TMP105（**不占 0x48**，可与上面共存） | `/dev/tmp105`：`read/write` + 6 个 ioctl 命令（m°C） | [设计](doc/i2c/chardev_tmp105/设计文档.md) · [手动](doc/i2c/chardev_tmp105/手动测试指南.md) | `tests/i2c/chardev_tmp105/`（18 项） |
+| i2c | `iio_tmp105` | `iio_tmp105.ko` | iio / 同一颗 TMP105（与 hwmon_tmp105 **互斥加载**，同占 0x48） | `/sys/bus/iio/devices/iio:deviceN/{name,in_temp_raw,in_temp_scale}`（raw+scale，用户态换算 m°C） | [设计](doc/i2c/iio_tmp105/设计文档.md) · [手动](doc/i2c/iio_tmp105/手动测试指南.md) | `tests/i2c/iio_tmp105/`（17 项） |
 
 ## 当前进度
 
@@ -36,6 +37,16 @@ libobject 只做用户态（UIO/VFIO/I2C/SPI/MTD 等），内核态的驱动/模
 | 与 `hwmon_tmp105` 共存（同芯片两种接口） | ✅ 实测：两个模块同时加载，两边都读到同一温度 |
 | 端到端验收 | ✅ `tests/i2c/chardev_tmp105/verify_qemu.sh`（**PASS=18 FAIL=0**） |
 | 踩坑记录（返回值二义性 / 9p 执行 / 重定向作用域） | ✅ 已写入[设计文档 §5](doc/i2c/chardev_tmp105/设计文档.md) |
+
+### iio_tmp105（学习：IIO 子系统，与 hwmon 同芯片对照）
+
+| 内容 | 状态 |
+|---|---|
+| IIO 标准骨架：`devm_iio_device_alloc` / `iio_priv` / `iio_chan_spec`（info_mask）/ `read_raw` / `devm_iio_device_register` | ✅ 完成（对照 hwmon_tmp105，见[设计文档 §2](doc/i2c/iio_tmp105/设计文档.md)） |
+| `in_temp_raw`（8.8 定点有符号）+ `in_temp_scale`（3.906250 m°C/LSB），用户态换算 m°C | ✅ 完成并实测：`raw=7680 → 30000 m°C`，与 i2cget 对照一致 |
+| L3 动态温度（raw 路径）：`-6250→-6500`（9 位量化）、`-6000`、`30000` | ✅ 实测跟随 |
+| 端到端验收 | ✅ `tests/i2c/iio_tmp105/verify_qemu.sh`（PASS=17 FAIL=0） |
+| 与 hwmon 的差异沉淀（数值模型：驱动算好 vs raw+scale） | ✅ 已写入[设计文档 §2](doc/i2c/iio_tmp105/设计文档.md) |
 
 ## 规格（一眼记住）
 
@@ -60,10 +71,13 @@ linux-kmods/
 │       ├── hwmon_tmp105/              # ← 一个驱动一个目录：<子系统>_<器件>
 │       │   ├── Kbuild                 #    obj-m := hwmon_tmp105.o
 │       │   └── hwmon_tmp105.c         #    i2c client + hwmon 子系统
-│       └── chardev_tmp105/            # ← 同一颗芯片的另一种暴露方式
-│           ├── Kbuild                 #    obj-m := chardev_tmp105.o
-│           ├── chardev_tmp105.h       #    用户态 ABI（ioctl 号，驱动/用户态共用）
-│           └── chardev_tmp105.c       #    cdev 字符设备：/dev/tmp105
+│       ├── chardev_tmp105/            # ← 同一颗芯片的另一种暴露方式
+│       │   ├── Kbuild                 #    obj-m := chardev_tmp105.o
+│       │   ├── chardev_tmp105.h       #    用户态 ABI（ioctl 号，驱动/用户态共用）
+│       │   └── chardev_tmp105.c       #    cdev 字符设备：/dev/tmp105
+│       └── iio_tmp105/                # ← 同一颗芯片的第三种外壳（IIO）
+│           ├── Kbuild                 #    obj-m := iio_tmp105.o
+│           └── iio_tmp105.c           #    i2c client + iio 子系统（raw+scale）
 ├── scripts/                           # 通用工具（与具体驱动无关）
 │   ├── build.sh                       #   递归构建 / clean / checkpatch / sparse
 │   ├── run_qemu.sh                    #   起 QEMU（含 QMP_SOCK 开关）+ 9p 挂载
@@ -73,19 +87,25 @@ linux-kmods/
 │       ├── hwmon_tmp105/              # ← 与 drivers/ 同构
 │       │   ├── read_hwmon.sh          #   客户机内自检（找 name=tmp105 → 校验 temp1_*）
 │       │   └── verify_qemu.sh         #   宿主端到端：编译 + 起 QEMU + 13 项断言
-│       └── chardev_tmp105/
-│           ├── ioctl_test.c           #   用户态测试程序（与驱动共用 ioctl 头）
-│           ├── read_dev.sh            #   客户机内自检（只用 /dev/tmp105 接口）
-│           └── verify_qemu.sh         #   宿主端到端：编译 + 起 QEMU + 18 项断言
+│       ├── chardev_tmp105/
+│       │   ├── ioctl_test.c           #   用户态测试程序（与驱动共用 ioctl 头）
+│       │   ├── read_dev.sh            #   客户机内自检（只用 /dev/tmp105 接口）
+│       │   └── verify_qemu.sh         #   宿主端到端：编译 + 起 QEMU + 18 项断言
+│       └── iio_tmp105/
+│           ├── read_iio.sh            #   客户机内自检（只用 in_temp_* 接口）
+│           └── verify_qemu.sh         #   宿主端到端：编译 + 起 QEMU + 17 项断言
 └── doc/
     ├── 开发规范.md                    # 全局：目录/命名/风格/许可/日志/提交/验收
     └── i2c/
         ├── hwmon_tmp105/
         │   ├── 设计文档.md            # 器件规约 / 架构 / 4 层测试 / §12 实测结论
         │   └── 手动测试指南.md        # 手动验证（只用驱动接口）
-        └── chardev_tmp105/
-            ├── 设计文档.md            # 字符驱动标准结构（①~⑩）/ ABI / 踩坑
-            └── 手动测试指南.md        # 手动验证（纯命令）
+        ├── chardev_tmp105/
+        │   ├── 设计文档.md            # 字符驱动标准结构（①~⑩）/ ABI / 踩坑
+        │   └── 手动测试指南.md        # 手动验证（纯命令）
+        └── iio_tmp105/
+            ├── 设计文档.md            # IIO 模型速讲 / 与 hwmon 对照 / ABI / 实测结论
+            └── 手动测试指南.md        # 手动验证（纯命令，raw 换算）
 ```
 
 ## 构建与验证
@@ -98,6 +118,7 @@ make clean
 
 tests/i2c/hwmon_tmp105/verify_qemu.sh      # 一键端到端：编译 + 起 QEMU + 13 项断言
 tests/i2c/chardev_tmp105/verify_qemu.sh    # 一键端到端（含交叉编译 ioctl_test）+ 18 项断言
+tests/i2c/iio_tmp105/verify_qemu.sh        # 一键端到端：编译 + 起 QEMU + 17 项断言（raw+scale）
 QMP_SOCK=/tmp/tmp105.sock ./scripts/run_qemu.sh   # 手动调试（客户机里 insmod/测试见手动指南）
 make KDIR=/lib/modules/$(uname -r)/build ARCH=x86_64 CROSS_COMPILE=   # 编本机内核模块
 ```
@@ -116,3 +137,5 @@ make KDIR=/lib/modules/$(uname -r)/build ARCH=x86_64 CROSS_COMPILE=   # 编本�
 - [hwmon_tmp105 手动测试指南](doc/i2c/hwmon_tmp105/手动测试指南.md) —— **纯手动命令版，且只用驱动的 hwmon 接口**：接口读写与边界（0.5 °C 量化、量程钳位）、报警翻转、`qom-set` 造温度、反向用例、`Ctrl-A c` 排查、现象速查表
 - [chardev_tmp105 设计文档](doc/i2c/chardev_tmp105/设计文档.md) —— **字符驱动标准结构教学**：①~⑩ 要素清单、生命周期、`/dev/tmp105` ABI、与 hwmon 的对照、踩坑与扩展点
 - [chardev_tmp105 手动测试指南](doc/i2c/chardev_tmp105/手动测试指南.md) —— 纯命令：编译驱动与 `ioctl_test`、起 QEMU、节点/读写/ioctl 逐步验证、与 hwmon 共存、现象速查表
+- [iio_tmp105 设计文档](doc/i2c/iio_tmp105/设计文档.md) —— **IIO 模型速讲**：raw+scale 数值模型、与 hwmon 逐项对照、`iio:deviceN` ABI、错误码、扩展点（事件/PROCESSED/分辨率）
+- [iio_tmp105 手动测试指南](doc/i2c/iio_tmp105/手动测试指南.md) —— 纯命令：定位 `iio:deviceN`、raw/scale 手算 m°C、`qom-set` 造温度、反向用例、现象速查表
