@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# chardev_spi_flash：SPI NOR Flash 的字符设备驱动
+# （学习用：字符驱动标准结构 + 标准 spidev 用户态 ABI）
+#
+# 命名规则见 doc/开发规范.md：
+#   目录 drivers/<子系统>/<总线>-<器件>/，模块名 = 主文件名 = <子系统>_<总线>_<器件>
+#   （这里 <子系统>=chardev、<总线>=spi、<器件>=flash；叶目录 spi-flash
+#    只描述"总线+器件"，子系统由父目录给出；模块名带子系统保证全局唯一）
+#
+# 与内核自带 spidev 的关系：对外 ABI 相同（/dev/spidevB.C + SPI_IOC_*），
+# 但 SPI 总线上一器件只能绑一个驱动，所以两者互斥（先 unbind spidev）。
+obj-m := chardev_spi_flash.o
